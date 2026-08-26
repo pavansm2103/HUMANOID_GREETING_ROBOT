@@ -1,0 +1,31 @@
+from picamera2 import Picamera2
+import cv2
+import os
+
+name = input("Enter person name: ")
+path = f"dataset/{name}"
+
+os.makedirs(path, exist_ok=True)
+
+picam2 = Picamera2()
+picam2.start()
+
+count = 0
+
+while True:
+    frame = picam2.capture_array()
+
+    cv2.imshow("Capture Images", frame)
+
+    key = cv2.waitKey(1)
+
+    if key == ord('c'):
+        img_name = f"{path}/{count}.jpg"
+        cv2.imwrite(img_name, frame)
+        print(f"Saved {img_name}")
+        count += 1
+
+    elif key == ord('q'):
+        break
+
+cv2.destroyAllWindows()

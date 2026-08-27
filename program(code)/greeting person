@@ -1,0 +1,93 @@
+from picamera2 import Picamera2
+import face_recognition
+import cv2
+import os
+import numpy as np
+import time
+
+# 🧠 Speech control variables
+last_spoken_name = ""
+last_spoken_time = 0
+cooldown = 5  # seconds
+
+known_encodings = []
+known_names = []
+
+dataset_path = "dataset"
+
+# ✅ Load dataset
+for person in os.listdir(dataset_path):
+    person_path = os.path.join(dataset_path, person)
+
+    for img_name in os.listdir(person_path):
+        img_path = os.path.join(person_path, img_name)
+
+        image = face_recognition.load_image_file(img_path)
+        encodings = face_recognition.face_encodings(image)
+
+        if len(encodings) > 0:
+            known_encodings.append(encodings[0])
+            known_names.append(person)
+
+print("Training complete!")
+
+# ✅ Start Raspberry Pi Camera
+picam2 = Picamera2()
+picam2.configure(picam2.create_preview_configuration())
+picam2.start()
+
+while True:
+    frame = picam2.capture_array()
+
+    # ⚡ Resize frame for faster processing
+    small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+
+    # Convert BGR → RGB
+    rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+
+    # ✅ Detect faces
+    faces = face_recognition.face_locations(rgb_small)
+    encodings = face_recognition.face_encodings(rgb_small, faces)
+
+    for encoding, face in zip(encodings, faces):
+        distances = face_recognition.face_distance(known_encodings, encoding)
+
+        name = "Unknown"
+
+        if len(distances) > 0:
+            best_match_index = np.argmin(distances)
+
+            if distances[best_match_index] < 0.5:
+                name = known_names[best_match_index]
+
+                # 🔊 Speak name (using espeak)
+                current_time = time.time()
+                if (name != last_spoken_name) or (current_time - last_spoken_time > cooldown):
+                    text = f"{name} detected"
+                    print(text)
+
+                    os.system(f'espeak "{text}"')  # 🔊 voice output
+
+                    last_spoken_name = name
+                    last_spoken_time = current_time
+
+        # 🔁 Scale face back to original size
+        top, right, bottom, left = face
+        top *= 4
+        right *= 4
+        bottom *= 4
+        left *= 4
+
+        # Draw rectangle
+        cv2.rectangle(frame, (left, top), (right, bottom), (0,255,0), 2)
+
+        # Display name
+        cv2.putText(frame, name, (left, top-10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
+
+    cv2.imshow("Face Recognition", frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cv2.destroyAllWindows()

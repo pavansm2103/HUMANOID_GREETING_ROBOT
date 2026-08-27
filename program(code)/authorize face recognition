@@ -5,7 +5,7 @@ import os
 import numpy as np
 import time
 
-# 🧠 Speech control variables
+#  Speech control variables
 last_spoken_name = ""
 last_spoken_time = 0
 cooldown = 5  # seconds
@@ -15,7 +15,7 @@ known_names = []
 
 dataset_path = "dataset"
 
-# ✅ Load dataset
+#  Load dataset
 for person in os.listdir(dataset_path):
     person_path = os.path.join(dataset_path, person)
 
@@ -31,7 +31,7 @@ for person in os.listdir(dataset_path):
 
 print("Training complete!")
 
-# ✅ Start Raspberry Pi Camera
+#  Start Raspberry Pi Camera
 picam2 = Picamera2()
 picam2.configure(picam2.create_preview_configuration())
 picam2.start()
@@ -39,13 +39,13 @@ picam2.start()
 while True:
     frame = picam2.capture_array()
 
-    # ⚡ Resize frame for faster processing
+    #  Resize frame for faster processing
     small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
 
     # Convert BGR → RGB
     rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
 
-    # ✅ Detect faces
+    #  Detect faces
     faces = face_recognition.face_locations(rgb_small)
     encodings = face_recognition.face_encodings(rgb_small, faces)
 
@@ -60,18 +60,18 @@ while True:
             if distances[best_match_index] < 0.5:
                 name = known_names[best_match_index]
 
-                # 🔊 Speak name (using espeak)
+                #  Speak name (using espeak)
                 current_time = time.time()
                 if (name != last_spoken_name) or (current_time - last_spoken_time > cooldown):
                     text = f"{name} detected"
                     print(text)
 
-                    os.system(f'espeak "{text}"')  # 🔊 voice output
+                    os.system(f'espeak "{text}"')  #  voice output
 
                     last_spoken_name = name
                     last_spoken_time = current_time
 
-        # 🔁 Scale face back to original size
+        #  Scale face back to original size
         top, right, bottom, left = face
         top *= 4
         right *= 4

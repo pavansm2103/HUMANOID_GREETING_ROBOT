@@ -1,0 +1,48 @@
+from picamera2 import Picamera2
+import cv2
+import os
+
+name = input("Enter person name: ")
+
+dataset_path = "/home/rasp/face_rec/faces/person1/dataset"
+
+person_path = os.path.join(dataset_path, name)
+
+os.makedirs(person_path, exist_ok=True)
+
+print(f"Images will be saved in: {person_path}")
+
+picam2 = Picamera2()
+picam2.start()
+
+count = 0
+
+print("\nPress 'c' to capture an image")
+print("Press 'q' to quit\n")
+
+while True:
+
+    frame = picam2.capture_array()
+
+    cv2.imshow("Capture Images", frame)
+
+    key = cv2.waitKey(1) & 0xFF
+
+    if key == ord('c'):
+
+        img_name = os.path.join(
+            person_path,
+            f"{count}.jpg"
+        )
+
+        cv2.imwrite(img_name, frame)
+
+        print(f"Saved: {img_name}")
+
+        count += 1
+
+    elif key == ord('q'):
+
+        break
+
+cv2.destroyAllWindows()

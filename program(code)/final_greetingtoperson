@@ -1,0 +1,259 @@
+from picamera2 import Picamera2
+import face_recognition
+import cv2
+import os
+import numpy as np
+import time
+
+# ==============================
+# SETTINGS
+# ==============================
+
+RECOGNITION_COOLDOWN = 10 * 60
+
+known_encodings = []
+known_names = []
+
+dataset_path = "/home/rasp/face_rec/faces/person1/dataset"
+
+last_recognized = {}
+
+
+# ==============================
+# LOAD DATASET
+# ==============================
+
+for person in os.listdir(dataset_path):
+
+    person_path = os.path.join(dataset_path, person)
+
+    if not os.path.isdir(person_path):
+        continue
+
+    for img_name in os.listdir(person_path):
+
+        img_path = os.path.join(person_path, img_name)
+
+        try:
+            image = face_recognition.load_image_file(img_path)
+            encodings = face_recognition.face_encodings(image)
+
+            if len(encodings) > 0:
+                known_encodings.append(encodings[0])
+                known_names.append(person)
+
+        except Exception as e:
+            print(f"Error loading {img_path}: {e}")
+
+
+print("Training complete!")
+print("Known persons:", known_names)
+
+
+# ==============================
+# START RASPBERRY PI CAMERA
+# ==============================
+
+picam2 = Picamera2()
+
+picam2.configure(
+    picam2.create_preview_configuration(
+        main={"format": "RGB888"}
+    )
+)
+
+picam2.start()
+
+time.sleep(2)
+
+
+# ==============================
+# FACE RECOGNITION LOOP
+# ==============================
+
+while True:
+
+    frame = picam2.capture_array()
+
+    # Resize for faster processing
+    small_frame = cv2.resize(
+        frame,
+        (0, 0),
+        fx=0.25,
+        fy=0.25
+    )
+
+    # Convert to RGB
+    rgb_small = cv2.cvtColor(
+        small_frame,
+        cv2.COLOR_BGR2RGB
+    )
+
+    # Detect faces
+    faces = face_recognition.face_locations(rgb_small)
+
+    # Get face encodings
+    encodings = face_recognition.face_encodings(
+        rgb_small,
+        faces
+    )
+
+
+    # ==============================
+    # PROCESS EACH FACE
+    # ==============================
+
+    for encoding, face in zip(encodings, faces):
+
+        name = "Guest"
+
+        # Compare with known faces
+        distances = face_recognition.face_distance(
+            known_encodings,
+            encoding
+        )
+
+        if len(distances) > 0:
+
+            best_match_index = np.argmin(distances)
+
+            if distances[best_match_index] < 0.5:
+
+                name = known_names[best_match_index]
+
+
+        # ==============================
+        # CHECK 10-MINUTE COOLDOWN
+        # ==============================
+
+        current_time = time.time()
+
+        if name != "Guest":
+
+            if name in last_recognized:
+
+                time_since_last = (
+                    current_time - last_recognized[name]
+                )
+
+                if time_since_last < RECOGNITION_COOLDOWN:
+
+                    remaining = int(
+                        RECOGNITION_COOLDOWN - time_since_last
+                    )
+
+                    minutes = remaining // 60
+                    seconds = remaining % 60
+
+                    print(
+                        f"{name} already recognized. "
+                        f"Cooldown: {minutes}m {seconds}s"
+                    )
+
+                else:
+
+                    text = (
+                        f"Hi {name} "
+                        f"Welcome to Robotics department"
+                    )
+
+                    print(text)
+
+                    os.system(
+                        f'espeak "{text}"'
+                    )
+
+                    last_recognized[name] = current_time
+
+            else:
+
+                text = (
+                    f"Hi {name} "
+                    f"Welcome to Robotics department"
+                )
+
+                print(text)
+
+                os.system(
+                    f'espeak "{text}"'
+                )
+
+                last_recognized[name] = current_time
+
+
+        # ==============================
+        # GUEST
+        # ==============================
+
+        else:
+
+            text = (
+                "Namaste Welcome to "
+                "G M INSTITUTE OF TECHNOLOGY"
+            )
+
+            print(text)
+
+            os.system(
+                f'espeak "{text}"'
+            )
+
+
+        # ==============================
+        # SCALE FACE COORDINATES
+        # ==============================
+
+        top, right, bottom, left = face
+
+        top *= 4
+        right *= 4
+        bottom *= 4
+        left *= 4
+
+
+        # ==============================
+        # DRAW FACE BOX
+        # ==============================
+
+        cv2.rectangle(
+            frame,
+            (left, top),
+            (right, bottom),
+            (0, 255, 0),
+            2
+        )
+
+
+        # Display name
+        cv2.putText(
+            frame,
+            name,
+            (left, top - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 255, 0),
+            2
+        )
+
+
+    # ==============================
+    # DISPLAY CAMERA
+    # ==============================
+
+    cv2.imshow(
+        "Face Recognition",
+        frame
+    )
+
+
+    # Press Q to quit
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+
+# ==============================
+# CLEANUP
+# ==============================
+
+cv2.destroyAllWindows()
+picam2.stop()
